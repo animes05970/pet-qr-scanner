@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pet QR Scanner</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom font */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f7f7;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        /* Style for the main container */
+        .card {
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        }
+        /* Custom styles for the TTS play button */
+        .play-button {
+            transition: all 0.1s ease;
+        }
+        .play-button:hover {
+            transform: scale(1.05);
+        }
+        .play-button:active {
+            transform: scale(0.98);
+        }
+        /* Ensure the image takes up space nicely */
+        #animal-image {
+            max-height: 250px;
+            object-fit: cover;
+            width: 100%;
+            transition: opacity 0.3s;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container p-4 w-full max-w-sm md:max-w-md">
+    <div id="app" class="card bg-white p-6 rounded-xl space-y-6">
+        <!-- ADDED BRANDING SECTION -->
+        <header class="text-center mb-4">
+            <h1 class="text-3xl font-bold text-gray-800">My Custom Pet Discovery App</h1>
+            <p class="text-sm text-indigo-500 font-semibold mt-1">Created by **App Creator** (Change this!)</p>
+        </header>
+        <!-- END BRANDING SECTION -->
+        
+        <p class="text-center text-sm text-gray-500">
+            Scan a code to discover a random **home pet**!
+            (Won't repeat an animal within the last 1 hour.)
+        </p>
+
+        <!-- Animal Display Area -->
+        <div id="animal-display" class="relative bg-gray-100 p-4 rounded-lg text-center min-h-[350px] flex flex-col justify-center items-center space-y-4 transition-all duration-300">
+            <p id="initial-message" class="text-gray-500 text-lg">Tap "Scan" to begin...</p>
+            <div id="animal-card" class="hidden w-full space-y-4">
+                <!-- Image Display -->
+                <div class="w-full h-[250px] bg-gray-200 rounded-lg shadow-md overflow-hidden flex items-center justify-center">
+                    <img id="animal-image" src="" alt="Animal Image" class="opacity-0">
+                    <svg id="image-loading-spinner" class="animate-spin h-8 w-8 text-gray-400 absolute hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                </div>
+
+                <div class="flex flex-col items-center">
+                    <h2 id="animal-name" class="text-4xl font-extrabold text-indigo-600"></h2>
+                    <p id="animal-sound-text" class="text-md text-gray-600 italic mt-1"></p>
+                </div>
+
+                <button id="play-sound-btn" onclick="playCurrentAnimalSound()" class="play-button bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2 px-4 rounded-full flex items-center justify-center space-x-2 transition duration-150 shadow-md">
+                    <!-- Icon: Speaker -->
+                    <svg id="play-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5">
+                        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                        <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                    </svg>
+                    <svg id="audio-loading-spinner" class="animate-spin h-5 w-5 text-white hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span id="play-text">Replay Sound</span>
+                </button>
+            </div>
+            <p id="time-left" class="text-xs text-gray-400 mt-2"></p>
+        </div>
+
+        <!-- Scan Button -->
+        <button id="scan-button" onclick="handleScan()" class="w-full bg-green-500 hover:bg-green-600 text-white text-xl font-bold py-3 rounded-xl transition duration-200 shadow-lg active:shadow-sm active:translate-y-0.5">
+            Simulate QR Scan
+        </button>
+
+        <!-- Status/Error Message Box -->
+        <div id="status-message" class="hidden p-3 text-sm rounded-lg text-center" role="alert"></div>
+
+        <!-- User ID for Multi-user Context -->
+        <div class="text-center text-xs text-gray-400 mt-4">
+            User ID (for data separation): <span id="user-id-display" class="font-mono text-gray-600 break-all"></span>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    // --- UTILITY FUNCTIONS (Audio Conversion) ---
+    function base64ToArrayBuffer(base64) {
+        const binaryString = atob(base64);
+        const len = binaryString.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+        }
+        return bytes.buffer;
+    }
+
+    function pcmToWav(pcm16, sampleRate) {
+        const numChannels = 1;
+        const sampleBits = 16;
+        const bytesPerSample = sampleBits / 8;
+        const dataSize = pcm16.byteLength;
+
+        const buffer = new ArrayBuffer(44 + dataSize);
+        const view = new DataView(buffer);
+        let offset = 0;
+
+        /* RIFF identifier */
+        writeString(view, offset, 'RIFF'); offset += 4;
+        /* file length */
+        view.setUint32(offset, 36 + dataSize, true); offset += 4;
+        /* RIFF type */
+        writeString(view, offset, 'WAVE'); offset += 4;
+        /* format chunk identifier */
+        writeString(view, offset, 'fmt '); offset += 4;
+        /* format chunk length */
+        view.setUint32(offset, 16, true); offset += 4;
+        /* sample format (1 for PCM) */
+        view.setUint16(offset, 1, true); offset += 2;
+        /* channel count */
+        view.setUint16(offset, numChannels, true); offset += 2;
+        /* sample rate */
+        view.setUint32(offset, sampleRate, true); offset += 4;
+        /* byte rate (sample rate * block align) */
+        view.setUint32(offset, sampleRate * numChannels * bytesPerSample, true); offset += 4;
+        /* block align (channels * bytes per sample) */
+        view.setUint16(offset, numChannels * bytesPerSample, true); offset += 2;
+        /* bits per sample */
+        view.setUint16(offset, sampleBits, true); offset += 2;
+        /* data chunk identifier */
+        writeString(view, offset, 'data'); offset += 4;
+        /* data chunk length */
+        view.setUint32(offset, dataSize, true); offset += 4;
+
+        // Write the PCM data
+        const pcmView = new Int16Array(buffer, offset);
+        pcmView.set(pcm16);
+
+        return new Blob([buffer], { type: 'audio/wav' });
+    }
+
+    function writeString(view, offset, string) {
+        for (let i = 0; i < string.length; i++) {
+            view.setUint8(offset + i, string.charCodeAt(i));
+        }
+    }
+
+    // --- API and APP CONFIG ---
+
+    // Image Generation Model
+    const IMAGE_MODEL_NAME = "imagen-4.0-generate-001";
+    // TTS Model
+    const TTS_MODEL_NAME = "-2.5-flash-preview-tts";
+    // CRITICAL FIX: Switched to Zephyr for faster, clearer delivery
+    const TTS_VOICE = "Zephyr"; 
+    const API_KEY = ""; // Canvas will inject this
+
+    // Cache and state management
+    const audioCache = {};
+    const imageCache = {};
+    let currentAnimalId = null; 
+    let currentAudio = null; 
+    
+    const userId = crypto.randomUUID(); 
+    document.getElementById('user-id-display').textContent = userId;
+
+    const ANIMAL_STORAGE_KEY = `animal_scan_history_${userId}`;
+    const COOLDOWN_DURATION_MS = 1 * 60 * 60 * 1000; // 1 hour
+
+    const animals = [
+        { id: 2, name: "Cat", sound: "Meow, meow! Purrr...", color: "blue" },
+        { id: 3, name: "Dog", sound: "Woof! Woof! A-roo!", color: "green" },
+        { id: 4, name: "Rabbit", sound: "Thump, thump, thump.", color: "gray" },
+        { id: 5, name: "Parrot", sound: "Squawk! Hello, I am a parrot!", color: "yellow" },
+        { id: 6, name: "Hamster", sound: "Squeak! Squeak!", color: "pink" },
+        { id: 7, name: "Guinea Pig", sound: "Wheek! Wheek!", color: "cyan" },
+        { id: 8, name: "Fish", sound: "Blub. Blub.", color: "red" },
+    ];
+
+    // --- UI/STATE MANAGEMENT ---
+
+    function showStatus(message, isError = false) {
+        const statusEl = document.getElementById('status-message');
+        statusEl.textContent = message;
+        statusEl.className = 'p-3 text-sm rounded-lg text-center';
+        statusEl.classList.remove('hidden', 'bg-red-100', 'text-red-700', 'bg-green-100', 'text-green-700');
+
+        if (isError) {
+            statusEl.classList.add('bg-red-100', 'text-red-700');
+        } else {
+            statusEl.classList.add('bg-green-100', 'text-green-700');
+        }
+        setTimeout(() => statusEl.classList.add('hidden'), 5000);
+    }
+
+    function setLoadingState(isLoading) {
+        const scanBtn = document.getElementById('scan-button');
+        const playBtn = document.getElementById('play-sound-btn');
+        const imageSpinner = document.getElementById('image-loading-spinner');
+        const audioSpinner = document.getElementById('audio-loading-spinner');
+        const animalImg = document.getElementById('animal-image');
+        const playText = document.getElementById('play-text');
+        const playIcon = document.getElementById('play-icon');
+
+        scanBtn.disabled = isLoading;
+        playBtn.disabled = isLoading;
+        scanBtn.textContent = isLoading ? 'Scanning...' : 'Simulate QR Scan';
+
+        if (isLoading) {
+            imageSpinner.classList.remove('hidden');
+            audioSpinner.classList.remove('hidden');
+            animalImg.classList.add('opacity-0');
+            playIcon.classList.add('hidden');
+            playText.textContent = 'Generating Assets...';
+        } else {
+            imageSpinner.classList.add('hidden');
+            audioSpinner.classList.add('hidden');
+            playIcon.classList.remove('hidden');
+            playText.textContent = 'Replay Sound';
+        }
+    }
+
+    // --- HISTORY/COOLDOWN LOGIC ---
+
+    function getHistory() {
+        try {
+            const historyJson = localStorage.getItem(ANIMAL_STORAGE_KEY);
+            return historyJson ? JSON.parse(historyJson) : {};
+        } catch (e) {
+            console.error("Error reading history from localStorage:", e);
+            return {};
+        }
+    }
+
+    function saveToHistory(animalId) {
+        const history = getHistory();
+        history[animalId] = Date.now();
+        try {
+            localStorage.setItem(ANIMAL_STORAGE_KEY, JSON.stringify(history));
+        } catch (e) {
+            console.error("Error saving history to localStorage:", e);
+            showStatus("Error saving history. Storage limit may be reached.", true);
+        }
+    }
+
+    function getNewRandomAnimal() {
+        const history = getHistory();
+        const availableAnimals = animals.filter(animal => {
+            const lastSeen = history[animal.id];
+            return !lastSeen || (Date.now() - lastSeen > COOLDOWN_DURATION_MS);
+        });
+
+        if (availableAnimals.length === 0) {
+            const oldestAnimal = animals.reduce((minAnimal, currentAnimal) => {
+                const lastSeen = history[currentAnimal.id] || 0;
+                if (!minAnimal || lastSeen < (history[minAnimal.id] || 0)) {
+                    return currentAnimal;
+                }
+                return minAnimal;
+            }, null);
+
+            if (oldestAnimal) {
+                showStatus(`All animals scanned recently. Showing the one last seen earliest: ${oldestAnimal.name}.`, false);
+                return oldestAnimal;
+            } else {
+                 return animals[Math.floor(Math.random() * animals.length)];
+            }
+        }
+
+        const randomIndex = Math.floor(Math.random() * availableAnimals.length);
+        return availableAnimals[randomIndex];
+    }
+
+    function updateTimeLeftDisplay() {
+        const history = getHistory();
+        if (currentAnimalId) {
+            const lastSeen = history[currentAnimalId];
+            if (lastSeen) {
+                const timeRemaining = (lastSeen + COOLDOWN_DURATION_MS) - Date.now();
+                if (timeRemaining > 0) {
+                    const hours = Math.floor(timeRemaining / (1000 * 60 * 60));
+                    const minutes = Math.floor((timeRemaining % (1000 * 60 * 60)) / (1000 * 60));
+                    document.getElementById('time-left').textContent = `This animal is on cooldown for ${hours}h ${minutes}m.`;
+                    return;
+                }
+            }
+        }
+        document.getElementById('time-left').textContent = '';
+    }
+
+    // --- GEMINI API CALLS (Image and Audio) ---
+
+    async function generateImage(animalName) {
+        const prompt = `A highly realistic photograph of a ${animalName} pet in a cozy home environment, cinematic lighting, ultra detailed.`;
+
+        if (imageCache[animalName]) {
+            return imageCache[animalName];
+        }
+
+        const payload = { 
+            instances: { prompt: prompt }, 
+            parameters: { "sampleCount": 1} 
+        };
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${IMAGE_MODEL_NAME}:predict?key=${API_KEY}`;
+        
+        try {
+            let response;
+            let attempts = 0;
+            let delay = 1000;
+            const maxAttempts = 5;
+
+            while (attempts < maxAttempts) {
+                response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (response.ok) break;
+                if (response.status === 429) {
+                    attempts++;
+                    if (attempts < maxAttempts) {
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        delay *= 2;
+                        continue;
+                    }
+                }
+                throw new Error(`API call failed with status: ${response.status}`);
+            }
+
+            if (!response.ok) {
+                 throw new Error(`Failed to fetch image after ${maxAttempts} attempts.`);
+            }
+
+            const result = await response.json();
+            
+            if (result.predictions && result.predictions.length > 0 && result.predictions[0].bytesBase64Encoded) {
+                const imageUrl = `data:image/png;base64,${result.predictions[0].bytesBase64Encoded}`;
+                imageCache[animalName] = imageUrl;
+                return imageUrl;
+            } else {
+                throw new Error("Image generation failed.");
+            }
+        } catch (error) {
+            console.error("Error generating image:", error);
+            showStatus(`Image Error: ${error.message}. Showing fallback.`, true);
+            // Fallback to a placehold.co image with the animal name
+            return `https://placehold.co/400x250/AAAAAA/FFFFFF?text=${animalName}`;
+        }
+    }
+
+    async function generateAndPlayAudio(animal) {
+        const audioKey = animal.id;
+        if (audioCache[audioKey]) {
+            currentAudio = new Audio(audioCache[audioKey]);
+            currentAudio.play();
+            return;
+        }
+
+        // CRITICAL FIX: Prompt only contains the sound to ensure fast playback
+        const prompt = `${animal.sound}`; 
+
+        const payload = {
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+                responseModalities: ["AUDIO"],
+                speechConfig: {
+                    voiceConfig: { prebuiltVoiceConfig: { voiceName: TTS_VOICE } }
+                }
+            },
+            model: TTS_MODEL_NAME
+        };
+
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${TTS_MODEL_NAME}:generateContent?key=${API_KEY}`;
+        
+        try {
+            let response;
+            let attempts = 0;
+            const maxAttempts = 5;
+            let delay = 1000;
+
+            while (attempts < maxAttempts) {
+                response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (response.ok) {
+                    break;
+                }
+
+                if (response.status === 429) { 
+                    attempts++;
+                    if (attempts < maxAttempts) {
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        delay *= 2;
+                        continue;
+                    }
+                }
+                throw new Error(`API call failed with status: ${response.status}`);
+            }
+
+            if (!response.ok) {
+                 throw new Error(`Failed to fetch audio after ${maxAttempts} attempts.`);
+            }
+
+            const result = await response.json();
+            const part = result?.candidates?.[0]?.content?.parts?.[0];
+            const audioData = part?.inlineData?.data;
+            const mimeType = part?.inlineData?.mimeType;
+
+            if (audioData && mimeType && mimeType.startsWith("audio/L16")) {
+                const sampleRateMatch = mimeType.match(/rate=(\d+)/);
+                const sampleRate = sampleRateMatch ? parseInt(sampleRateMatch[1], 10) : 24000;
+
+                const pcmData = base64ToArrayBuffer(audioData);
+                const pcm16 = new Int16Array(pcmData);
+                const wavBlob = pcmToWav(pcm16, sampleRate);
+                const audioUrl = URL.createObjectURL(wavBlob);
+                
+                audioCache[audioKey] = audioUrl;
+                currentAudio = new Audio(audioUrl);
+                currentAudio.play();
+            } else {
+                throw new Error("Invalid audio response format from TTS API.");
+            }
+
+        } catch (error) {
+            console.error("Error during TTS API call:", error);
+            // Don't show an error for every sound, just log it.
+        } 
+    }
+
+    // --- MAIN LOGIC ---
+
+    function displayAnimalDetails(animal, imageUrl) {
+        currentAnimalId = animal.id;
+        document.getElementById('initial-message').classList.add('hidden');
+        document.getElementById('animal-card').classList.remove('hidden');
+
+        document.getElementById('animal-name').textContent = animal.name;
+        document.getElementById('animal-sound-text').textContent = `(Sound: ${animal.sound})`;
+
+        const animalImg = document.getElementById('animal-image');
+        animalImg.src = imageUrl;
+        animalImg.onload = () => animalImg.classList.remove('opacity-0');
+
+        // Set background color
+        const display = document.getElementById('animal-display');
+        display.style.backgroundColor = getAnimalBgColor(animal.color);
+
+        saveToHistory(animal.id);
+        updateTimeLeftDisplay();
+    }
+
+    function getAnimalBgColor(color) {
+        switch(color) {
+            case 'red': return '#FEE2E2'; // Red-100
+            case 'blue': return '#DBEAFE'; // Blue-100
+            case 'green': return '#D1FAE5'; // Green-100
+            case 'gray': return '#E5E7EB'; // Gray-200
+            case 'yellow': return '#FFFBEB'; // Amber-100
+            case 'pink': return '#FCE7F3'; // Pink-100
+            case 'cyan': return '#CFFAFE'; // Cyan-100
+            default: return '#f3f4f6'; // Gray-100
+        }
+    }
+
+    window.playCurrentAnimalSound = function() {
+        const animal = animals.find(a => a.id === currentAnimalId);
+        if (animal) {
+            // Replay uses the cached audio, so it should be immediate
+            generateAndPlayAudio(animal);
+        } else {
+            showStatus("Please scan an animal first!", true);
+        }
+    };
+
+    window.handleScan = async function() {
+        const animal = getNewRandomAnimal();
+        setLoadingState(true);
+
+        document.getElementById('initial-message').classList.add('hidden');
+        document.getElementById('animal-card').classList.remove('hidden');
+
+        // Start both image and audio generation concurrently
+        const [imageUrl] = await Promise.all([
+            generateImage(animal.name),
+            generateAndPlayAudio(animal)
+        ]);
+        
+        // Update UI with generated image and animal data
+        displayAnimalDetails(animal, imageUrl);
+
+        setLoadingState(false);
+        showStatus(`Successfully scanned a ${animal.name}!`, false);
+    };
+
+    window.onload = () => {
+        // Set up the interval for the cooldown display
+        setInterval(updateTimeLeftDisplay, 60000); // Update every minute
+    };
+
+</script>
+</body>
+</html>
+
+
